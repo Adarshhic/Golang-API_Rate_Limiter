@@ -2,31 +2,48 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 )
+
 
 func RateLimitMiddleware(
 	next http.Handler,
 	limiter *RateLimiter,
 ) http.Handler {
-	return http.HandlerFunc(func(
-		w http.ResponseWriter,
-		r *http.Request,
-	) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Extract the IP address from RemoteAddr (IP:port).
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
-			http.Error(w, "Invalid client address", http.StatusBadRequest)
+			http.Error(
+				w,
+				"Invalid client address",
+				http.StatusBadRequest,
+			)
 			return
 		}
 
-		if !limiter.Allow(ip) {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusTooManyRequests)
-			fmt.Fprintln(w, "Rate limit exceeded. Please try again later.")
+	
+		allowed, err := limiter.AllowWithError(ip)
+		if err != nil {
+			http.Error(
+				w,
+				"Rate limiter temporarily unavailable",
+				http.StatusServiceUnavailable,
+			)
 			return
 		}
+
+	
+		if !allowed {
+			http.Error(
+				w,
+				"Rate limit exceeded. Please try again later.",
+				http.StatusTooManyRequests,
+			)
+			return
+		}
+
 
 		next.ServeHTTP(w, r)
 	})

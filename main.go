@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -11,17 +10,18 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "Hello, World!")
 }
 
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("Request received:", r.URL.Path)
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-
 func main() {
-	limiter := NewRateLimiter(2, 5)
+
+	store := NewRedisStore("localhost:6379")
+
+	if err := store.client.Ping(store.ctx).Err(); err != nil {
+		log.Fatalf("Could not connect to Redis: %v", err)
+	}
+
+	limiter, err := NewRateLimiter(store, 2, 5)
+	if err != nil {
+		log.Fatalf("Invalid rate limiter configuration: %v", err)
+	}
 
 	handler := RateLimitMiddleware(
 		http.HandlerFunc(helloHandler),
